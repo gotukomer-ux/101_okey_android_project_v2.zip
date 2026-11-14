@@ -12,14 +12,112 @@ def replace_once(relative_path: str, old: str, new: str, count: int = 1) -> None
         raise SystemExit(f"Patch context not found in {relative_path}: {old!r}")
     path.write_text(source.replace(old, new, count), encoding="utf-8")
 
-# Socket implements both Stream and StreamSink. Use Stream.map explicitly,
-# avoiding StreamSink.cast which can bind the socket's write side.
+# Avoid StreamSink extension methods on dart:io Socket, which is also a
+# writable sink. Read the raw byte stream and split complete UTF-8 lines
+# without transforming or casting the Socket object itself.
 replace_once(
     "lib/multiplayer/lan_transport.dart",
-    ".transform(utf8.decoder)",
-    ".map((chunk) => chunk as List<int>)\n        .transform(utf8.decoder)",
+    "import 'dart:io';",
+    "import 'dart:io';\nimport 'dart:typed_data';",
+)
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    "StreamSubscription<String>",
+    "StreamSubscription<Uint8List>",
     count=2,
 )
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    """_peerSubscriptions[peerId] = socket
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(
+      (line) => _handleLine(line, peerId),
+      onError: (Object error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          peerId: peerId,
+          message: 'Oyuncu bağlantı hatası: $error')),
+      onDone: () => _removePeer(peerId),
+      cancelOnError: false,
+    );""",
+    """_peerSubscriptions[peerId] = _listenLines(
+      socket,
+      (line) => _handleLine(line, peerId),
+      (error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          peerId: peerId,
+          message: 'Oyuncu bağlantı hatası: $error')),
+      () => _removePeer(peerId),
+    );""",
+)
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    """_clientSubscription = socket
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(
+      (line) => _handleLine(line, 'lan-server'),
+      onError: (Object error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          message: 'Wi-Fi bağlantı hatası: $error')),
+      onDone: () {
+        _client = null;
+        _emit(const TransportEvent(
+            type: TransportEventType.disconnected, peerId: 'lan-server'));
+      },
+      cancelOnError: false,
+    );""",
+    """_clientSubscription = _listenLines(
+      socket,
+      (line) => _handleLine(line, 'lan-server'),
+      (error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          message: 'Wi-Fi bağlantı hatası: $error')),
+      () {
+        _client = null;
+        _emit(const TransportEvent(
+            type: TransportEventType.disconnected, peerId: 'lan-server'));
+      },
+    );""",
+)
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    "  void _handleLine(String line, String peerId) {",
+    """  StreamSubscription<Uint8List> _listenLines(
+    Socket socket,
+    void Function(String) onLine,
+    void Function(Object) onError,
+    void Function() onDone,
+  ) {
+    final pending = <int>[];
+    return socket.listen(
+      (chunk) {
+        pending.addAll(chunk);
+        var consumed = 0;
+        for (var index = 0; index < pending.length; index++) {
+          if (pending[index] != 10) continue;
+          final bytes = pending.sublist(consumed, index);
+          if (bytes.isNotEmpty && bytes.last == 13) bytes.removeLast();
+          try {
+            onLine(utf8.decode(bytes));
+          } on FormatException catch (error) {
+            onError(error);
+          }
+          consumed = index + 1;
+        }
+        if (consumed > 0) pending.removeRange(0, consumed);
+      },
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: false,
+    );
+  }
+
+  void _handleLine(String line, String peerId) {""",
+)
+
+# The protocol test also reads Socket byte streams; Stream.map avoids
+# invoking a StreamSink cast extension during UTF-8 conversion.
 replace_once(
     "test/multiplayer/protocol_test.dart",
     ".transform(utf8.decoder)",
@@ -74,4 +172,4 @@ replace_once(
     });""",
 )
 
-print("Applied source fixes for analysis, mandatory side-discard use, and LAN socket handling.")
+print("Applied compile, bot opening, and raw LAN socket listener fixes.")
