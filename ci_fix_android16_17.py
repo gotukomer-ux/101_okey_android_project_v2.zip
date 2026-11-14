@@ -174,8 +174,8 @@ changed |= update(bot_test, "import 'package:classic_101_okey/game/game_state.da
 # Keep LAN sockets duplex: listen directly to bytes instead of using transform(),
 # which binds the IOSink half of dart:io Socket and prevents later writes.
 lan_content = lan.read_text()
-if "import 'dart:typed_data';" not in lan_content:
-    changed |= update(lan, "import 'dart:io';\n", "import 'dart:io';\nimport 'dart:typed_data';\n")
+if "import 'dart:typed_data';" in lan_content:
+    changed |= update(lan, "import 'dart:typed_data';\n", "")
 if 'Map<String, StreamSubscription<Uint8List>> _peerSubscriptions' not in lan.read_text():
     changed |= update(lan, 'Map<String, StreamSubscription<String>> _peerSubscriptions',
                       'Map<String, StreamSubscription<Uint8List>> _peerSubscriptions')
