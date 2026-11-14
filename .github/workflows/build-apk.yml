@@ -30,6 +30,9 @@ jobs:
       - name: Extract Flutter project
         run: unzip -q 101_okey_android_project_v2.zip
 
+      - name: Apply verified CI compile fixes
+        run: python3 ci_patch.py
+
       - name: Generate Android platform files
         working-directory: 101_okey
         run: bash scripts/bootstrap_android.sh
