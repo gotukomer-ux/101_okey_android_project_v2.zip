@@ -170,4 +170,130 @@ changed |= update(lobby, 'Colors.white.withOpacity(0.04)', 'Colors.white.withVal
 bot_test = ROOT / 'test/bot/bot_strategy_test.dart'
 changed |= update(bot_test, "import 'package:classic_101_okey/game/game_state.dart';\n", '')
 
+
+# Keep LAN sockets duplex: listen directly to bytes instead of using transform(),
+# which binds the IOSink half of dart:io Socket and prevents later writes.
+lan_content = lan.read_text()
+if "import 'dart:typed_data';" not in lan_content:
+    changed |= update(lan, "import 'dart:io';\n", "import 'dart:io';\nimport 'dart:typed_data';\n")
+if 'Map<String, StreamSubscription<Uint8List>> _peerSubscriptions' not in lan.read_text():
+    changed |= update(lan, 'Map<String, StreamSubscription<String>> _peerSubscriptions',
+                      'Map<String, StreamSubscription<Uint8List>> _peerSubscriptions')
+    changed |= update(lan, 'StreamSubscription<String>? _clientSubscription;',
+                      'StreamSubscription<Uint8List>? _clientSubscription;')
+
+peer_old = '''    _peerSubscriptions[peerId] = socket
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(
+      (line) => _handleLine(line, peerId),
+      onError: (Object error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          peerId: peerId,
+          message: 'Oyuncu bağlantı hatası: $error')),
+      onDone: () => _removePeer(peerId),
+      cancelOnError: false,
+    );
+'''
+peer_new = '''    _peerSubscriptions[peerId] = _listenSocketLines(
+      socket,
+      onLine: (line) => _handleLine(line, peerId),
+      onError: (error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          peerId: peerId,
+          message: 'Oyuncu bağlantı hatası: $error')),
+      onDone: () => _removePeer(peerId),
+    );
+'''
+client_old = '''    _clientSubscription = socket
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(
+      (line) => _handleLine(line, 'lan-server'),
+      onError: (Object error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          message: 'Wi-Fi bağlantı hatası: $error')),
+      onDone: () {
+        _client = null;
+        _emit(const TransportEvent(
+            type: TransportEventType.disconnected, peerId: 'lan-server'));
+      },
+      cancelOnError: false,
+    );
+'''
+client_new = '''    _clientSubscription = _listenSocketLines(
+      socket,
+      onLine: (line) => _handleLine(line, 'lan-server'),
+      onError: (error) => _emit(TransportEvent(
+          type: TransportEventType.error,
+          message: 'Wi-Fi bağlantı hatası: $error')),
+      onDone: () {
+        _client = null;
+        _emit(const TransportEvent(
+            type: TransportEventType.disconnected, peerId: 'lan-server'));
+      },
+    );
+'''
+if '_listenSocketLines(' not in lan.read_text():
+    changed |= update(lan, peer_old, peer_new)
+    changed |= update(lan, client_old, client_new)
+    listener = r'''
+  /// Reads newline-delimited UTF-8 without binding the Socket's IOSink.
+  /// Socket is duplex: Stream.transform may bind the sink through addStream.
+  StreamSubscription<Uint8List> _listenSocketLines(
+    Socket socket, {
+    required void Function(String line) onLine,
+    required void Function(Object error) onError,
+    required void Function() onDone,
+  }) {
+    final pending = <int>[];
+    return socket.listen(
+      (chunk) {
+        for (final byte in chunk) {
+          if (byte == 0x0A) {
+            if (pending.isNotEmpty && pending.last == 0x0D) pending.removeLast();
+            try {
+              onLine(utf8.decode(pending));
+            } on FormatException catch (error) {
+              onError(error);
+            } finally {
+              pending.clear();
+            }
+          } else {
+            pending.add(byte);
+            if (pending.length > 1024 * 1024) {
+              onError(const FormatException('Ağ mesajı 1 MiB sınırını aştı.'));
+              pending.clear();
+              socket.destroy();
+              return;
+            }
+          }
+        }
+      },
+      onError: (Object error) => onError(error),
+      onDone: onDone,
+      cancelOnError: false,
+    );
+  }
+
+'''
+    changed |= update(lan, '  void _handleLine(String line, String peerId) {',
+                      listener + '  void _handleLine(String line, String peerId) {')
+
+# Medium bot uses a bounded disjoint-set search so it can reliably retain a
+# picked discard in a valid 101 opening; easy mode keeps the lighter heuristic.
+bot_strategy = ROOT / 'lib/bot/bot_strategy.dart'
+changed |= update(
+    bot_strategy,
+    '    if (difficulty == BotDifficulty.hard) {\n      final result = _searchDisjoint(',
+    '    if (difficulty != BotDifficulty.easy) {\n      final result = _searchDisjoint(',
+)
+changed |= update(
+    bot_strategy,
+    '        nodeBudget: 24000,',
+    '        nodeBudget: difficulty == BotDifficulty.hard ? 24000 : 12000,',
+)
+
 print('PATCHED' if changed else 'ALREADY_PATCHED')

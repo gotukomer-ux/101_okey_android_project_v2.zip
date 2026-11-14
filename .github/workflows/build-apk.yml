@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '101_okey_mavi_arayuz_yeni.zip'
       - '.github/workflows/build-apk.yml'
       - 'ci_fix_android16_17.py'
 
