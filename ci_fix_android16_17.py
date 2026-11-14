@@ -346,6 +346,52 @@ if '_writeQueues' not in lan.read_text():
         '    _peers.clear();\n    _writeQueues.clear();\n',
     )
 
+
+# A game snapshot can be in flight from an earlier action. Do not treat every
+# snapshot as an acknowledgement for the current command; use explicit ACK.
+room_coordinator = ROOT / 'lib/multiplayer/room_coordinator.dart'
+old_snapshot_block = '''    } else if (type == 'game_snapshot') {
+      try {
+        final rawGame = data['game'];
+        if (rawGame is! Map) throw const FormatException('Oyun verisi eksik.');
+        _remoteGameView = GameView.fromJson(Map<String, dynamic>.from(rawGame));
+        _publishGame(_remoteGameView!);
+        final pending = _pendingActionResult;
+        if (pending != null && !pending.isCompleted) pending.complete();
+      } on FormatException catch (error) {
+        _status('Oyun verisi okunamadı: \${error.message}');
+      }
+    } else if (type == 'join_rejected' || type == 'room_full') {
+'''
+new_snapshot_block = '''    } else if (type == 'game_snapshot') {
+      try {
+        final rawGame = data['game'];
+        if (rawGame is! Map) throw const FormatException('Oyun verisi eksik.');
+        _remoteGameView = GameView.fromJson(Map<String, dynamic>.from(rawGame));
+        _publishGame(_remoteGameView!);
+      } on FormatException catch (error) {
+        _status('Oyun verisi okunamadı: \${error.message}');
+      }
+    } else if (type == 'action_accepted') {
+      final pending = _pendingActionResult;
+      if (pending != null && !pending.isCompleted) pending.complete();
+    } else if (type == 'join_rejected' || type == 'room_full') {
+'''
+changed |= update(room_coordinator, old_snapshot_block, new_snapshot_block)
+
+old_accepted_send = '''    await _broadcastGameViews();
+    _status('\${player.name} hamlesi kabul edildi.');
+'''
+new_accepted_send = '''    await _broadcastGameViews();
+    try {
+      await transport.send({'type': 'action_accepted'}, peerId: peerId);
+    } catch (error) {
+      _status('Hamle kabul edildi ancak onay iletilemedi: $error');
+    }
+    _status('\${player.name} hamlesi kabul edildi.');
+'''
+changed |= update(room_coordinator, old_accepted_send, new_accepted_send)
+
 # Medium bot uses a bounded disjoint-set search so it can reliably retain a
 # picked discard in a valid 101 opening; easy mode keeps the lighter heuristic.
 bot_strategy = ROOT / 'lib/bot/bot_strategy.dart'
