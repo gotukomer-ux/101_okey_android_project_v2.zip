@@ -148,26 +148,26 @@ changed |= update(
 
 coordinator = ROOT / 'lib/multiplayer/room_coordinator.dart'
 for old_decl, new_decl in [
-    ('  Stream<String> get statuses =>', '  @override\\n  Stream<String> get statuses =>'),
-    ('  Stream<GameView> get gameViews =>', '  @override\\n  Stream<GameView> get gameViews =>'),
-    ('  GameView? get currentGameView =>', '  @override\\n  GameView? get currentGameView =>'),
-    ('  Future<void> submitGameAction(Map<String, dynamic> action) async {', '  @override\\n  Future<void> submitGameAction(Map<String, dynamic> action) async {'),
-    ('  Future<void> leave() async {', '  @override\\n  Future<void> leave() async {'),
-    ('  Future<void> dispose() async {', '  @override\\n  Future<void> dispose() async {'),
+    ('  Stream<String> get statuses =>', '  @override\n  Stream<String> get statuses =>'),
+    ('  Stream<GameView> get gameViews =>', '  @override\n  Stream<GameView> get gameViews =>'),
+    ('  GameView? get currentGameView =>', '  @override\n  GameView? get currentGameView =>'),
+    ('  Future<void> submitGameAction(Map<String, dynamic> action) async {', '  @override\n  Future<void> submitGameAction(Map<String, dynamic> action) async {'),
+    ('  Future<void> leave() async {', '  @override\n  Future<void> leave() async {'),
+    ('  Future<void> dispose() async {', '  @override\n  Future<void> dispose() async {'),
 ]:
     changed |= update(coordinator, old_decl, new_decl)
 
 for relative in ['lib/main.dart', 'lib/ui/game_table_screen.dart', 'lib/ui/multiplayer_lobby_screen.dart']:
     p = ROOT / relative
     text = p.read_text()
-    if not text.startswith('// ignore_for_file: deprecated_member_use\\n'):
-        p.write_text('// ignore_for_file: deprecated_member_use\\n' + text)
+    if not text.startswith('// ignore_for_file: deprecated_member_use\n'):
+        p.write_text('// ignore_for_file: deprecated_member_use\n' + text)
         changed = True
 
 lobby = ROOT / 'lib/ui/multiplayer_lobby_screen.dart'
 changed |= update(lobby, 'Colors.white.withOpacity(0.04)', 'Colors.white.withValues(alpha: 0.04)')
 
 bot_test = ROOT / 'test/bot/bot_strategy_test.dart'
-changed |= update(bot_test, "import 'package:classic_101_okey/game/game_state.dart';\\n", '')
+changed |= update(bot_test, "import 'package:classic_101_okey/game/game_state.dart';\n", '')
 
 print('PATCHED' if changed else 'ALREADY_PATCHED')
