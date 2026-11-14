@@ -271,4 +271,97 @@ replace_once(
     });""",
 )
 
-print("Applied analyzer, bot side-discard, and serialized LAN socket write fixes.")
+
+# Correlate each client action with its own host acknowledgement so an older
+# game snapshot cannot accidentally complete a newer pending action.
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    "  Completer<void>? _pendingActionResult;",
+    "  Completer<void>? _pendingActionResult;\n  String? _pendingActionId;\n  int _actionSequence = 0;",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    """    final pending = Completer<void>();
+    _pendingActionResult = pending;
+    final acknowledgement = pending.future.timeout(const Duration(seconds: 12));""",
+    """    final pending = Completer<void>();
+    final actionId = '$localPlayerId-' + (++_actionSequence).toString();
+    _pendingActionResult = pending;
+    _pendingActionId = actionId;
+    final acknowledgement = pending.future.timeout(const Duration(seconds: 12));""",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    "      await transport.send({'type': 'game_action', 'actionData': action});",
+    "      await transport.send({'type': 'game_action', 'actionId': actionId, 'actionData': action});",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    "      if (identical(_pendingActionResult, pending)) _pendingActionResult = null;",
+    """      if (identical(_pendingActionResult, pending)) {
+        _pendingActionResult = null;
+        _pendingActionId = null;
+      }""",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    "        if (pending != null && !pending.isCompleted) pending.complete();",
+    "        if (pending != null && !pending.isCompleted && data['actionId'] == _pendingActionId) pending.complete();",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    "      if (pending != null && !pending.isCompleted) pending.completeError(StateError(reason));",
+    "      if (pending != null && !pending.isCompleted && data['actionId'] == _pendingActionId) pending.completeError(StateError(reason));",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    "    final rawAction = data['actionData'];",
+    "    final actionId = data['actionId'];\n    final rawAction = data['actionData'];",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    """        {'type': 'action_rejected', 'reason': 'Oyuncu bağlantısı veya hamle verisi geçersiz.'},""",
+    """        {'type': 'action_rejected', 'actionId': actionId, 'reason': 'Oyuncu bağlantısı veya hamle verisi geçersiz.'},""",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    """        {'type': 'action_rejected', 'reason': error.toString()},""",
+    """        {'type': 'action_rejected', 'actionId': actionId, 'reason': error.toString()},""",
+)
+old_action_broadcast = (
+    "    await _broadcastGameViews();\n"
+    "    _status('" + "$" + "{player.name} hamlesi kabul edildi.');"
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    old_action_broadcast,
+    """    await _broadcastGameViews(
+      acknowledgementPeerId: peerId,
+      acknowledgementActionId: actionId is String ? actionId : null,
+    );
+    _status(player.name + ' hamlesi kabul edildi.');""",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    "  Future<void> _broadcastGameViews() async {",
+    "  Future<void> _broadcastGameViews({String? acknowledgementPeerId, String? acknowledgementActionId}) async {",
+)
+replace_once(
+    "lib/multiplayer/room_coordinator.dart",
+    """        await transport.send(
+          {'type': 'game_snapshot', 'game': engine.viewFor(seat).toJson()},
+          peerId: peerId,
+        );""",
+    """        await transport.send(
+          {
+            'type': 'game_snapshot',
+            'game': engine.viewFor(seat).toJson(),
+            if (peerId == acknowledgementPeerId && acknowledgementActionId != null)
+              'actionId': acknowledgementActionId,
+          },
+          peerId: peerId,
+        );""",
+)
+
+
+print("Applied compile, LAN write-queue, bot side-discard, and action-correlation fixes.")
