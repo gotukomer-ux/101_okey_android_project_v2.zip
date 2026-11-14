@@ -19,8 +19,9 @@ def update(path: Path, old: str, new: str, expected: int = 1) -> bool:
 
 changed = False
 lan = ROOT / 'lib/multiplayer/lan_transport.dart'
-changed |= update(lan, 'socket\n        .transform(utf8.decoder)',
-                  'socket\n        .cast<List<int>>()\n        .transform(utf8.decoder)', expected=2)
+if '_listenSocketLines(' not in lan.read_text():
+    changed |= update(lan, 'socket\n        .transform(utf8.decoder)',
+                      'socket\n        .cast<List<int>>()\n        .transform(utf8.decoder)', expected=2)
 
 bootstrap = ROOT / 'scripts/bootstrap_android.sh'
 old_tail = '''cp "$ROOT/android_template/app/src/main/kotlin/com/example/classic_101_okey/MainActivity.kt" \\
