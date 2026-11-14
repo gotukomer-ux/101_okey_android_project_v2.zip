@@ -283,6 +283,69 @@ if '_listenSocketLines(' not in lan.read_text():
     changed |= update(lan, '  void _handleLine(String line, String peerId) {',
                       listener + '  void _handleLine(String line, String peerId) {')
 
+
+# Serialize writes on each duplex socket; concurrent JOIN/SNAPSHOT broadcasts
+# otherwise race against IOSink.flush and can throw "StreamSink is bound".
+if '_writeQueues' not in lan.read_text():
+    changed |= update(
+        lan,
+        '  final Map<String, StreamSubscription<Uint8List>> _peerSubscriptions = {};\n',
+        '  final Map<String, StreamSubscription<Uint8List>> _peerSubscriptions = {};\n  final Map<String, Future<void>> _writeQueues = {};\n',
+    )
+    old_send = '''        socket.write(line);
+        await socket.flush();
+      } else {
+        for (final socket in _peers.values.toList()) {
+          socket.write(line);
+          await socket.flush();
+        }
+      }
+    } else {
+      final socket = _client;
+      if (socket == null) throw StateError('Sunucuya bağlı değil.');
+      socket.write(line);
+      await socket.flush();
+    }
+  }
+'''
+    new_send = '''        await _queueSocketWrite(socket, peerId, line);
+      } else {
+        for (final entry in _peers.entries.toList()) {
+          await _queueSocketWrite(entry.value, entry.key, line);
+        }
+      }
+    } else {
+      final socket = _client;
+      if (socket == null) throw StateError('Sunucuya bağlı değil.');
+      await _queueSocketWrite(socket, 'lan-server', line);
+    }
+  }
+
+  /// Serializes writes per connection so concurrent room events cannot call
+  /// IOSink.flush while another write is still flushing on the same socket.
+  Future<void> _queueSocketWrite(Socket socket, String key, String line) {
+    final previous = _writeQueues[key] ?? Future<void>.value();
+    final next = previous.catchError((Object _) {}).then((_) async {
+      if (_closed) throw StateError('Bağlantı kapalı.');
+      socket.write(line);
+      await socket.flush();
+    });
+    _writeQueues[key] = next;
+    return next;
+  }
+'''
+    changed |= update(lan, old_send, new_send)
+    changed |= update(
+        lan,
+        '    _peerSubscriptions.remove(peerId)?.cancel();\n',
+        '    _peerSubscriptions.remove(peerId)?.cancel();\n    _writeQueues.remove(peerId);\n',
+    )
+    changed |= update(
+        lan,
+        '    _peers.clear();\n',
+        '    _peers.clear();\n    _writeQueues.clear();\n',
+    )
+
 # Medium bot uses a bounded disjoint-set search so it can reliably retain a
 # picked discard in a valid 101 opening; easy mode keeps the lighter heuristic.
 bot_strategy = ROOT / 'lib/bot/bot_strategy.dart'
