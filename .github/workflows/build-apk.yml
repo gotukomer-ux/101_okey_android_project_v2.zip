@@ -78,9 +78,13 @@ jobs:
 
       - name: Verify Android SDK targets
         working-directory: 101_okey
+        shell: bash
         run: |
-          grep -Eq 'compileSdk = 37|compileSdkVersion 37' android/app/build.gradle.kts android/app/build.gradle
-          grep -Eq 'targetSdk = 37|targetSdkVersion 37' android/app/build.gradle.kts android/app/build.gradle
+          GRADLE_FILE="android/app/build.gradle.kts"
+          [[ -f "$GRADLE_FILE" ]] || GRADLE_FILE="android/app/build.gradle"
+          test -f "$GRADLE_FILE"
+          grep -Eq 'compileSdk = 37|compileSdkVersion 37' "$GRADLE_FILE"
+          grep -Eq 'targetSdk = 37|targetSdkVersion 37' "$GRADLE_FILE"
 
       - name: Resolve packages
         working-directory: 101_okey
