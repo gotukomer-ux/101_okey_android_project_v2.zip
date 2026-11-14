@@ -44,4 +44,11 @@ replace_once(
     "import 'package:classic_101_okey/domain/tile.dart';\nimport 'package:classic_101_okey/domain/meld.dart';",
 )
 
+# Remove an unused test import so Flutter analyze has no warning-level failures.
+replace_once(
+    "test/bot/bot_strategy_test.dart",
+    "import 'package:classic_101_okey/game/game_state.dart';\n",
+    "",
+)
+
 print("Applied compile-analysis fixes to the extracted Flutter project.")
