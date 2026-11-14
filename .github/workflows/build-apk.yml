@@ -3,7 +3,8 @@ name: 101 Okey Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    paths:
+      - '101_okey_modern_ui_source_fixed.zip'
 
 permissions:
   contents: read
@@ -12,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout project archive
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Set up Java
@@ -27,25 +28,26 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Extract Flutter project
-        run: unzip -q 101_okey_android_project_v2.zip
+      - name: Extract modern Flutter project
+        run: unzip -q 101_okey_modern_ui_source_fixed.zip
 
-      - name: Apply verified CI compile fixes
-        run: python3 ci_patch.py
+      - name: Verify project files
+        working-directory: 101_okey
+        run: test -s pubspec.yaml && test -s lib/main.dart
 
-      - name: Generate Android platform files
+      - name: Generate Android platform project
         working-directory: 101_okey
         run: bash scripts/bootstrap_android.sh
 
-      - name: Install Flutter packages
+      - name: Resolve packages
         working-directory: 101_okey
         run: flutter pub get
 
-      - name: Analyze source
+      - name: Static analysis
         working-directory: 101_okey
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze
 
-      - name: Run tests
+      - name: Automated tests
         working-directory: 101_okey
         run: flutter test --reporter expanded
 
@@ -56,7 +58,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: 101-okey-release-apk
+          name: classic-101-okey-modern-release-apk
           path: 101_okey/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
