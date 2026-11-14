@@ -12,9 +12,8 @@ def replace_once(relative_path: str, old: str, new: str, count: int = 1) -> None
         raise SystemExit(f"Patch context not found in {relative_path}: {old!r}")
     path.write_text(source.replace(old, new, count), encoding="utf-8")
 
-# Avoid StreamSink extension methods on dart:io Socket, which is also a
-# writable sink. Read the raw byte stream and split complete UTF-8 lines
-# without transforming or casting the Socket object itself.
+# Read Socket input as raw bytes; do not use transform/cast on the bidirectional
+# Socket object, because it is also the outbound IOSink.
 replace_once(
     "lib/multiplayer/lan_transport.dart",
     "import 'dart:io';",
@@ -116,22 +115,125 @@ replace_once(
   void _handleLine(String line, String peerId) {""",
 )
 
-# The protocol test also reads Socket byte streams; Stream.map avoids
-# invoking a StreamSink cast extension during UTF-8 conversion.
+# Add a per-socket write queue. Room snapshot broadcasts and game-start views
+# may be emitted concurrently; IOSink.flush must not overlap with another write.
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    "  final Map<String, Socket> _peers = {};",
+    "  final Map<String, Socket> _peers = {};\n  final Map<Socket, Future<void>> _sendQueues = {};",
+)
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    """  @override
+  Future<void> send(Map<String, dynamic> message, {String? peerId}) async {
+    final line = '${jsonEncode(message)}\\n';
+    if (_isHost) {
+      if (peerId != null) {
+        final socket = _peers[peerId];
+        if (socket == null) throw StateError('Oyuncu bağlantısı bulunamadı.');
+        socket.write(line);
+        await socket.flush();
+      } else {
+        for (final socket in _peers.values.toList()) {
+          socket.write(line);
+          await socket.flush();
+        }
+      }
+    } else {
+      final socket = _client;
+      if (socket == null) throw StateError('Sunucuya bağlı değil.');
+      socket.write(line);
+      await socket.flush();
+    }
+  }""",
+    """  Future<void> _queueWrite(Socket socket, String line) {
+    final previous = _sendQueues[socket] ?? Future<void>.value();
+    final operation = previous.then((_) async {
+      socket.write(line);
+      await socket.flush();
+    });
+    // Keep the queue usable after an individual send fails, while returning
+    // the original error to the caller that requested that send.
+    _sendQueues[socket] =
+        operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return operation;
+  }
+
+  @override
+  Future<void> send(Map<String, dynamic> message, {String? peerId}) async {
+    final line = '${jsonEncode(message)}\\n';
+    if (_isHost) {
+      if (peerId != null) {
+        final socket = _peers[peerId];
+        if (socket == null) throw StateError('Oyuncu bağlantısı bulunamadı.');
+        await _queueWrite(socket, line);
+      } else {
+        for (final socket in _peers.values.toList()) {
+          await _queueWrite(socket, line);
+        }
+      }
+    } else {
+      final socket = _client;
+      if (socket == null) throw StateError('Sunucuya bağlı değil.');
+      await _queueWrite(socket, line);
+    }
+  }""",
+)
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    """  void _removePeer(String peerId) {
+    _peerSubscriptions.remove(peerId)?.cancel();
+    _peers.remove(peerId)?.destroy();
+    _emit(TransportEvent(
+        type: TransportEventType.disconnected, peerId: peerId));
+  }""",
+    """  void _removePeer(String peerId) {
+    _peerSubscriptions.remove(peerId)?.cancel();
+    final socket = _peers.remove(peerId);
+    if (socket != null) {
+      _sendQueues.remove(socket);
+      socket.destroy();
+    }
+    _emit(TransportEvent(
+        type: TransportEventType.disconnected, peerId: peerId));
+  }""",
+)
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    """    if (socket != null) {
+      socket.destroy();
+      _emit(TransportEvent(type: TransportEventType.disconnected, peerId: peerId));
+    }""",
+    """    if (socket != null) {
+      _sendQueues.remove(socket);
+      socket.destroy();
+      _emit(TransportEvent(type: TransportEventType.disconnected, peerId: peerId));
+    }""",
+)
+replace_once(
+    "lib/multiplayer/lan_transport.dart",
+    """    _peers.clear();
+    await _clientSubscription?.cancel();""",
+    """    _peers.clear();
+    _sendQueues.clear();
+    await _clientSubscription?.cancel();""",
+)
+
+# Protocol test reads Socket bytes through Stream.map.
 replace_once(
     "test/multiplayer/protocol_test.dart",
     ".transform(utf8.decoder)",
     ".map((chunk) => chunk as List<int>)\n          .transform(utf8.decoder)",
 )
 
-# Import the paired-device model in the lobby where its type is displayed.
+# Import paired-device model in the lobby.
 replace_once(
     "lib/ui/multiplayer_lobby_screen.dart",
     "import '../multiplayer/room_state.dart';",
     "import '../multiplayer/room_state.dart';\nimport '../multiplayer/transport_event.dart';",
 )
 
-# Tests construct MeldTile values, so import their defining library explicitly.
+# Tests construct MeldTile values, so import their defining library.
 replace_once(
     "test/bot/bot_strategy_test.dart",
     "import 'package:classic_101_okey/domain/tile.dart';",
@@ -150,15 +252,12 @@ replace_once(
     "",
 )
 
-# When an opening must include a just-taken discard, use disjoint search for
-# every bot difficulty instead of a greedy candidate ordering.
+# For mandatory use of a side-discard, use disjoint search at all difficulties.
 replace_once(
     "lib/bot/bot_strategy.dart",
     "if (difficulty == BotDifficulty.hard) {\n      final result = _searchDisjoint(",
     "if (difficulty == BotDifficulty.hard || requiredTileId != null) {\n      final result = _searchDisjoint(",
 )
-
-# Put meld candidates containing the required discard first during the search.
 replace_once(
     "lib/bot/bot_strategy.dart",
     "final ordered = [...candidates]..sort((a, b) => b.points.compareTo(a.points));",
@@ -172,4 +271,4 @@ replace_once(
     });""",
 )
 
-print("Applied compile, bot opening, and raw LAN socket listener fixes.")
+print("Applied analyzer, bot side-discard, and serialized LAN socket write fixes.")
