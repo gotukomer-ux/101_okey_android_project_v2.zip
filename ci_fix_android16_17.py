@@ -5,7 +5,6 @@ import re
 
 ROOT = Path('101_okey')
 
-
 def update(path: Path, old: str, new: str, expected: int = 1) -> bool:
     content = path.read_text()
     count = content.count(old)
@@ -19,14 +18,9 @@ def update(path: Path, old: str, new: str, expected: int = 1) -> bool:
     return True
 
 changed = False
-
 lan = ROOT / 'lib/multiplayer/lan_transport.dart'
-changed |= update(
-    lan,
-    'socket\n        .transform(utf8.decoder)',
-    'socket\n        .cast<List<int>>()\n        .transform(utf8.decoder)',
-    expected=2,
-)
+changed |= update(lan, 'socket\n        .transform(utf8.decoder)',
+                  'socket\n        .cast<List<int>>()\n        .transform(utf8.decoder)', expected=2)
 
 bootstrap = ROOT / 'scripts/bootstrap_android.sh'
 old_tail = '''cp "$ROOT/android_template/app/src/main/kotlin/com/example/classic_101_okey/MainActivity.kt" \\
@@ -47,8 +41,8 @@ from pathlib import Path
 import re, sys
 p = Path(sys.argv[1])
 s = p.read_text()
-s, compile_count = re.subn(r'compileSdk\\s*=\\s*flutter\\.compileSdkVersion', 'compileSdk = 37', s, count=1)
-s, target_count = re.subn(r'targetSdk\\s*=\\s*flutter\\.targetSdkVersion', 'targetSdk = 37', s, count=1)
+s, compile_count = re.subn(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 37', s, count=1)
+s, target_count = re.subn(r'targetSdk\s*=\s*flutter\.targetSdkVersion', 'targetSdk = 37', s, count=1)
 if compile_count != 1 or target_count != 1:
     raise SystemExit('Gradle Kotlin DSL: compileSdk/targetSdk API 37 ayarlanamadı.')
 p.write_text(s)
@@ -59,8 +53,8 @@ from pathlib import Path
 import re, sys
 p = Path(sys.argv[1])
 s = p.read_text()
-s, compile_count = re.subn(r'compileSdkVersion\\s+flutter\\.compileSdkVersion', 'compileSdkVersion 37', s, count=1)
-s, target_count = re.subn(r'targetSdkVersion\\s+flutter\\.targetSdkVersion', 'targetSdkVersion 37', s, count=1)
+s, compile_count = re.subn(r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 37', s, count=1)
+s, target_count = re.subn(r'targetSdkVersion\s+flutter\.targetSdkVersion', 'targetSdkVersion 37', s, count=1)
 if compile_count != 1 or target_count != 1:
     raise SystemExit('Gradle Groovy: compileSdk/targetSdk API 37 ayarlanamadı.')
 p.write_text(s)
@@ -73,9 +67,10 @@ fi
 echo "Android platformu oluşturuldu; compileSdk/targetSdk 37 (Android 17) olarak ayarlandı."
 echo "Android 16 (API 36) uyumluluğu korunuyor."
 '''
-if old_tail in bootstrap.read_text():
+bootstrap_content = bootstrap.read_text()
+if old_tail in bootstrap_content:
     changed |= update(bootstrap, old_tail, new_tail)
-elif new_tail not in bootstrap.read_text():
+elif new_tail not in bootstrap_content:
     raise SystemExit('Android bootstrap patch point not found')
 
 inner_workflow = ROOT / '.github/workflows/android-apk.yml'
@@ -104,10 +99,11 @@ new_step = '''      - name: Install Android 17 SDK (API 37)
       - name: Generate Android platform project
         run: bash scripts/bootstrap_android.sh
 '''
-if old_step in inner_workflow.read_text():
+inner_content = inner_workflow.read_text()
+if new_step not in inner_content:
+    if old_step not in inner_content:
+        raise SystemExit('Android workflow patch point not found')
     changed |= update(inner_workflow, old_step, new_step)
-elif new_step not in inner_workflow.read_text():
-    raise SystemExit('Android workflow patch point not found')
 
 pubspec = ROOT / 'pubspec.yaml'
 changed |= update(pubspec, 'version: 0.7.0+7', 'version: 0.7.1+8')
