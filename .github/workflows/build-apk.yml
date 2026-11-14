@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '101_okey_modern_ui_source_fixed.zip'
+      - '101_okey_modern_ui_source_wifi_bots.zip'
 
 permissions:
   contents: read
@@ -28,8 +28,8 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Extract modern Flutter project
-        run: unzip -q 101_okey_modern_ui_source_fixed.zip
+      - name: Extract Wi-Fi and bot-enabled Flutter project
+        run: unzip -q 101_okey_modern_ui_source_wifi_bots.zip
 
       - name: Verify project files
         working-directory: 101_okey
@@ -58,7 +58,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: classic-101-okey-modern-release-apk
+          name: classic-101-okey-wifi-bots-release-apk
           path: 101_okey/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
