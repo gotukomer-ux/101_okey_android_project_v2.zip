@@ -95,21 +95,23 @@ new_step = '''      - name: Install Android 17 SDK (API 37)
           fi
           set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
-          yes | "$SDKMANAGER" --install "platforms;android-37" "build-tools;37.0.0"
+          yes | "$SDKMANAGER" --install "platforms;android-37.0" "build-tools;37.0.0" --channel=3
           set -o pipefail
 
       - name: Generate Android platform project
         run: bash scripts/bootstrap_android.sh
 '''
 inner_content = inner_workflow.read_text()
-legacy_sdk_step = new_step.replace(
-    '          set +o pipefail\\n', ''
-).replace(
-    '          set -o pipefail\\n', ''
-)
 if new_step not in inner_content:
-    if legacy_sdk_step in inner_content:
-        changed |= update(inner_workflow, legacy_sdk_step, new_step)
+    start_marker = '      - name: Install Android 17 SDK (API 37)\\n'
+    end_marker = '      - name: Generate Android platform project\\n'
+    start = inner_content.find(start_marker)
+    if start >= 0:
+        end = inner_content.find(end_marker, start)
+        if end < 0:
+            raise SystemExit('Android platform generation step not found')
+        inner_workflow.write_text(inner_content[:start] + new_step + inner_content[end + len(end_marker):])
+        changed = True
     elif old_step in inner_content:
         changed |= update(inner_workflow, old_step, new_step)
     else:
