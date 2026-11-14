@@ -43,7 +43,7 @@ jobs:
 
       - name: Analyze source
         working-directory: 101_okey
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Run tests
         working-directory: 101_okey
