@@ -359,7 +359,7 @@ old_snapshot_block = '''    } else if (type == 'game_snapshot') {
         final pending = _pendingActionResult;
         if (pending != null && !pending.isCompleted) pending.complete();
       } on FormatException catch (error) {
-        _status('Oyun verisi okunamadı: \${error.message}');
+        _status('Oyun verisi okunamadı: ${error.message}');
       }
     } else if (type == 'join_rejected' || type == 'room_full') {
 '''
@@ -370,7 +370,7 @@ new_snapshot_block = '''    } else if (type == 'game_snapshot') {
         _remoteGameView = GameView.fromJson(Map<String, dynamic>.from(rawGame));
         _publishGame(_remoteGameView!);
       } on FormatException catch (error) {
-        _status('Oyun verisi okunamadı: \${error.message}');
+        _status('Oyun verisi okunamadı: ${error.message}');
       }
     } else if (type == 'action_accepted') {
       final pending = _pendingActionResult;
@@ -380,7 +380,7 @@ new_snapshot_block = '''    } else if (type == 'game_snapshot') {
 changed |= update(room_coordinator, old_snapshot_block, new_snapshot_block)
 
 old_accepted_send = '''    await _broadcastGameViews();
-    _status('\${player.name} hamlesi kabul edildi.');
+    _status('${player.name} hamlesi kabul edildi.');
 '''
 new_accepted_send = '''    await _broadcastGameViews();
     try {
@@ -388,7 +388,7 @@ new_accepted_send = '''    await _broadcastGameViews();
     } catch (error) {
       _status('Hamle kabul edildi ancak onay iletilemedi: $error');
     }
-    _status('\${player.name} hamlesi kabul edildi.');
+    _status('${player.name} hamlesi kabul edildi.');
 '''
 changed |= update(room_coordinator, old_accepted_send, new_accepted_send)
 
