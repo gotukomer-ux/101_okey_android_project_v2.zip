@@ -1,4 +1,4 @@
-name: 101 Okey Android APK
+name: 101 Okey Android APK (Android 16-17)
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
       - '.github/workflows/build-apk.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -32,13 +32,52 @@ jobs:
       - name: Extract uploaded blue UI Flutter project
         run: unzip -q 101_okey_mavi_arayuz_yeni.zip
 
-      - name: Verify project files
-        working-directory: 101_okey
-        run: test -s pubspec.yaml && test -s lib/main.dart
+      - name: Fix Dart LAN stream types and Android 16-17 configuration
+        run: python3 ci_fix_android16_17.py
 
-      - name: Generate Android platform project
+      - name: Save corrected source ZIP to repository
+        shell: bash
+        run: |
+          zip -qr -X /tmp/101_okey_mavi_arayuz_yeni_fixed.zip 101_okey
+          if ! cmp -s /tmp/101_okey_mavi_arayuz_yeni_fixed.zip 101_okey_mavi_arayuz_yeni.zip; then
+            cp /tmp/101_okey_mavi_arayuz_yeni_fixed.zip 101_okey_mavi_arayuz_yeni.zip
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add 101_okey_mavi_arayuz_yeni.zip
+            git commit -m "Fix 101 Okey source for Android 16 and 17"
+            git push
+          else
+            echo "The source ZIP already contains the compatibility fixes."
+          fi
+
+      - name: Install Android 17 SDK (API 37)
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          fi
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            echo "Android sdkmanager was not found under $SDK_ROOT." >&2
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          yes | "$SDKMANAGER" --install "platforms;android-37" "build-tools;37.0.0"
+
+      - name: Verify source structure
+        working-directory: 101_okey
+        run: python3 scripts/static_check.py
+
+      - name: Generate Android platform project (API 37)
         working-directory: 101_okey
         run: bash scripts/bootstrap_android.sh
+
+      - name: Verify Android SDK targets
+        working-directory: 101_okey
+        run: |
+          grep -Eq 'compileSdk = 37|compileSdkVersion 37' android/app/build.gradle.kts android/app/build.gradle
+          grep -Eq 'targetSdk = 37|targetSdkVersion 37' android/app/build.gradle.kts android/app/build.gradle
 
       - name: Resolve packages
         working-directory: 101_okey
@@ -56,10 +95,13 @@ jobs:
         working-directory: 101_okey
         run: flutter build apk --release
 
+      - name: Verify APK output
+        run: test -s 101_okey/build/app/outputs/flutter-apk/app-release.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: classic-101-okey-wifi-bots-release-apk
+          name: classic-101-okey-android-16-17-release-apk
           path: 101_okey/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
