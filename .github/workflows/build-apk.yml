@@ -65,7 +65,7 @@ jobs:
           fi
           set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
-          yes | "$SDKMANAGER" --install "platforms;android-37" "build-tools;37.0.0"
+          yes | "$SDKMANAGER" --install "platforms;android-37.0" "build-tools;37.0.0" --channel=3
           set -o pipefail
 
       - name: Verify source structure
