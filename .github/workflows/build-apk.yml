@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '101_okey_modern_ui_source_wifi_bots.zip'
+      - '101_okey_mavi_arayuz_yeni.zip'
+      - '.github/workflows/build-apk.yml'
 
 permissions:
   contents: read
@@ -28,8 +29,8 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Extract Wi-Fi and bot-enabled Flutter project
-        run: unzip -q 101_okey_modern_ui_source_wifi_bots.zip
+      - name: Extract uploaded blue UI Flutter project
+        run: unzip -q 101_okey_mavi_arayuz_yeni.zip
 
       - name: Verify project files
         working-directory: 101_okey
