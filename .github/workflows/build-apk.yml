@@ -63,8 +63,10 @@ jobs:
             echo "Android sdkmanager was not found under $SDK_ROOT." >&2
             exit 1
           fi
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
           yes | "$SDKMANAGER" --install "platforms;android-37" "build-tools;37.0.0"
+          set -o pipefail
 
       - name: Verify source structure
         working-directory: 101_okey
