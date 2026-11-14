@@ -93,17 +93,27 @@ new_step = '''      - name: Install Android 17 SDK (API 37)
             echo "Android sdkmanager bulunamadı." >&2
             exit 1
           fi
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
           yes | "$SDKMANAGER" --install "platforms;android-37" "build-tools;37.0.0"
+          set -o pipefail
 
       - name: Generate Android platform project
         run: bash scripts/bootstrap_android.sh
 '''
 inner_content = inner_workflow.read_text()
+legacy_sdk_step = new_step.replace(
+    '          set +o pipefail\\n', ''
+).replace(
+    '          set -o pipefail\\n', ''
+)
 if new_step not in inner_content:
-    if old_step not in inner_content:
+    if legacy_sdk_step in inner_content:
+        changed |= update(inner_workflow, legacy_sdk_step, new_step)
+    elif old_step in inner_content:
+        changed |= update(inner_workflow, old_step, new_step)
+    else:
         raise SystemExit('Android workflow patch point not found')
-    changed |= update(inner_workflow, old_step, new_step)
 
 pubspec = ROOT / 'pubspec.yaml'
 changed |= update(pubspec, 'version: 0.7.0+7', 'version: 0.7.1+8')
